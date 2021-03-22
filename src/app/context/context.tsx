@@ -33,25 +33,22 @@ export const AppContextProvider: FC<Props> = ({children, backend}) => {
     const usersCache = useRef<UsersCache>({});
 
     useEffect(() => {
-        let usersSub: Subscription;
-        const sub = backend.tickets().subscribe((tickets) => {
+        setIsBusy(true);
+        const loadData = async () => {
+            const tickets = await backend.tickets().toPromise();
             setTickets(tickets);
             const uniqueUsers: { [key: number]: string } = {};
             tickets.filter(t => !!t.assigneeId).forEach(t => uniqueUsers[t.assigneeId!] = '');
-            usersSub = forkJoin(Object.keys(uniqueUsers).map(id => backend.user(+id)))
+            const users = await forkJoin(Object.keys(uniqueUsers).map(id => backend.user(+id)))
                 .pipe(
                     filter(u => !!u)
-                )
-                .subscribe(users => {
-                    users.forEach(u => (usersCache.current[+u!.id] = u!));
-                    setTicketsLoaded(true)
-                });
-        })
-
-        return () => {
-            sub.unsubscribe();
-            usersSub.unsubscribe();
+                ).toPromise();
+            users.forEach(u => (usersCache.current[+u!.id] = u!));
+            setTicketsLoaded(true)
+            setIsBusy(false);
         }
+
+        loadData()
     }, [backend])
 
     const getCachedUser = (id: number) => usersCache.current[id];
